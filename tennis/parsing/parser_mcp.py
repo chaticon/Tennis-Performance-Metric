@@ -138,7 +138,7 @@ def event_from_raw(raw: str) -> PointEvent:
 """
 Parse a Match Charting Project data file into a dictionary of Match objects indexed by match_id
 """
-def parse_mcp(mcp_file: str) -> dict[Match]:
+def parse_mcp(mcp_file: str) -> dict[str, Match]:
     matches = {}
 
     with open(mcp_file) as f:

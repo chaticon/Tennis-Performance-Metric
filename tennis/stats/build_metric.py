@@ -27,8 +27,8 @@ class Metric:
 
 """
 Compute the weights for the metric using the given dataset.
-It's important that we allow for the construction and usage of different metrics, since
-we may be interested in comparison with different populations of players.
+It's important that we allow for the construction and usage of different metrics,
+since we may be interested in comparison with different populations of players.
 """
 def build_metric(name: str, data: dict[str, Match]) -> Metric:
     # TODO Step 1: Compute the probability that the server wins the game from a given game state, i.e., the current score
