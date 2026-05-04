@@ -148,7 +148,7 @@ def parse_mcp(mcp_file: str) -> dict[Match]:
             match_id = point['match_id']
             pts = matches.setdefault(match_id, {}) # get/create the associated point dict
             raw = ','.join([point['1st'].strip(), point['2nd'].strip()]) # put the 1st and 2nd serves together into one raw string
-            p = Point(raw, point['Pts'], point['PtWinner'], event_from_raw(raw))
+            p = Point(raw, point['PtWinner'], point['Svr'], point['Pts'], event_from_raw(raw))
             pts[int(point['Pt'])] = p
 
     # we should now have the matches in the form of dictionaries of points
@@ -165,9 +165,9 @@ def parse_mcp(mcp_file: str) -> dict[Match]:
             point = points[i]
             if point.current_score == '0-0' and game_points:
                 if re.search('(?:AD)|(?:40)', game_points[-1].current_score):
-                    game = Game(game_points[-1].winner, game_points)
+                    game = Game(game_points[-1].winner, game_points[-1].server, game_points)
                 else:
-                    game = Game(-1, game_points) # in the event that we are missing the final point of the game, mark the winner unknown
+                    game = Game(-1, game_points[-1].server, game_points) # in the event that we are missing the final point of the game, mark the winner unknown
                 match.games.append(game)
                 game_points = []
             

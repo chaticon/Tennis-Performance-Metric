@@ -1,8 +1,8 @@
 from dataclasses import dataclass
-from enum import Enum, auto
+from enum import IntEnum, auto
 
 
-class PointEvent(Enum):
+class PointEvent(IntEnum):
     ACE = auto()
     SERVICE_WINNER = auto()
     DOUBLE_FAULT = auto()
@@ -18,14 +18,16 @@ class PointEvent(Enum):
 @dataclass
 class Point:
     raw: str
+    winner: str
+    server: str
     current_score: str
-    winner: int
     event: PointEvent
         
 
 @dataclass 
 class Game:
-    winner: int
+    winner: str
+    server: str
     points: list[Point]
 
 
