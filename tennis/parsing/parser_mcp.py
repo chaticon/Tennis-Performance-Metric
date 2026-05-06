@@ -1,7 +1,10 @@
 import csv
 from enum import StrEnum
-from .match_data import Match, Game, Point, PointEvent
+from .match_data import *
 import re
+import numpy as np
+from numpy.typing import NDArray
+from typing import Any
 
 
 class RallyEnd(StrEnum):
@@ -136,9 +139,14 @@ def event_from_raw(raw: str) -> PointEvent:
 
 
 """
-Parse a Match Charting Project data file into a dictionary of Match objects indexed by match_id
+Parse a Match Charting Project data file into a numpy array
+Each row of the array represents a point, with the following data:
+
+match_id_hash point_idx server game_state point_event point_winner game_winner
+
+See match_data.MatrixIndex
 """
-def parse_mcp(mcp_file: str) -> dict[str, Match]:
+def parse_mcp(mcp_file: str) -> NDArray[np.integer]:
     matches = {}
 
     with open(mcp_file) as f:
@@ -147,32 +155,49 @@ def parse_mcp(mcp_file: str) -> dict[str, Match]:
         for point in reader:
             match_id = point['match_id']
             pts = matches.setdefault(match_id, {}) # get/create the associated point dict
-            raw = ','.join([point['1st'].strip(), point['2nd'].strip()]) # put the 1st and 2nd serves together into one raw string
-            p = Point(raw, point['PtWinner'], point['Svr'], point['Pts'], event_from_raw(raw))
-            pts[int(point['Pt'])] = p
+            raw = ','.join([point['1st'].strip(), point['2nd'].strip()]) # put the 1st and 2nd serves together into one string describing the point
+            
+            # potential limitation of our analysis - we currently don't have a way to analyze tiebreaks
+            score = point['Pts'].strip()
+            if score in game_states:
+                try: 
+                    p = Point(raw, int(point['PtWinner']), int(point['Svr']), game_states[score], event_from_raw(raw),
+                            (int(point['Gm1']), int(point['Gm2'])), (int(point['Set1']), int(point['Set2'])))
+                    pts[int(point['Pt'])] = p
+                except ValueError:
+                    print(f'Error parsing point {point['Pt']} of match "{match_id}" in file "{mcp_file}"')
 
     # we should now have the matches in the form of dictionaries of points
     # I do this to account for the possiblity that the points are not ordered
-    # now we parse the dictionary into Match and Game objects
+    # now we parse the dictionary into a numpy array
 
-    output = {}
+    output = []
     for match_id in matches:
-        match = Match(match_id, [])
         points = matches[match_id]
         i = 1
         game_points = []
-        while i in points: # now that we know we have all the available points, we can safely view them in order
+        for i in range(1, max(points) + 1): # now that we know we have all the available points, we can safely view them in order
+            if i not in points:
+                continue
+
             point = points[i]
-            if point.current_score == '0-0' and game_points:
-                if re.search('(?:AD)|(?:40)', game_points[-1].current_score):
-                    game = Game(game_points[-1].winner, game_points[-1].server, game_points)
-                else:
-                    game = Game(-1, game_points[-1].server, game_points) # in the event that we are missing the final point of the game, mark the winner unknown
-                match.games.append(game)
-                game_points = []
             
-            game_points.append(point)
-            i += 1
-        output[match_id] = match
-    
+            # this should be a more foolproof way to determine which points are part of which game
+            if game_points:
+                last_idx, last_point = game_points[-1] # the most recent point in the game other than maybe 'point'
+                if point.games != last_point.games or point.sets != last_point.sets: # the next point is from a different game, so we may be missing the deciding point 
+                    if last_idx == i - 1: # we aren't missing any intermediate points, so we can obtain the winner of the game as the winner of the last point (covers NextGen ruleset)
+                        for i, p in game_points:
+                            output.append([hash(match_id), i, p.server, p.current_score, p.event, p.winner, last_point.winner])
+                    game_points = [] # regardless we clear the game points, as we aren't interested in points where we couldn't determine the winner of the game
+                elif point.decider_for(point.winner): # the winner of the next point won the game
+                    game_points.append((i, point))
+                    for i, p in game_points:
+                        output.append([hash(match_id), i, p.server, p.current_score, p.event, p.winner, point.winner])
+                    game_points = []
+                    continue # we don't want to add duplicate points
+
+            game_points.append((i, point))
+
+    output = np.array(output)
     return output
