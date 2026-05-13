@@ -18,7 +18,7 @@ python -m tennis.stats.analyze_player [data format] [Player_Name or *] [metric n
 
 The player's name should be capitalized properly, with spaces replaced by underscores. Running the script for one player will collect their points from the provided dataset and evaluate their performance using the specified metric. Currently, it will simply output the result to the console.
 
-Running the script with the wildcard (*) instead of specifying the player will evaluate every player in the dataset. The result will be output to [metric_name]_on_[dataset].csv in the performance directory. This file will contain each player's name, their performance, and the point-by-point sample size for that player. Currently, players with fewer than 1000 points in the dataset are omitted.
+Running the script with the wildcard (*) instead of specifying the player will evaluate every player in the dataset. The result will be output to [metric_name]\_on\_[dataset].csv in the performance directory. This file will contain each player's name, their performance, and the point-by-point sample size for that player. Currently, players with fewer than 1000 points in the dataset are omitted.
 
 
 This much is implemented, I may add a central script that executes these commands with an additional command that combines building the metric and then analyzing all the players into one. I can also produce visuals if needed, as-is the project produces data which can then be used to make visualizations, rather than being a visualization tool itself.
