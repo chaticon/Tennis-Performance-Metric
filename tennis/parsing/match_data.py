@@ -17,32 +17,41 @@ class PointEvent(IntEnum):
 
 
 class GameState(IntEnum):
-    LOVE_ALL = auto()
-    LOVE_FIFTEEN = auto()
-    LOVE_THIRTY = auto()
-    LOVE_FOURTY = auto()
-    FIFTEEN_LOVE = auto()
-    FIFTEEN_ALL = auto()
-    FIFTEEN_THIRTY = auto()
-    FIFTEEN_FOURTY = auto()
-    THIRTY_LOVE = auto()
-    THIRTY_FIFTEEN = auto()
-    THIRTY_ALL = auto()
-    THIRTY_FOURTY = auto()
-    FOURTY_LOVE = auto()
-    FOURTY_FIFTEEN = auto()
-    FOURTY_THIRTY = auto()
-    DEUCE = auto()
-    AD_FOURTY = auto()
-    FOURTY_AD = auto()
+    LOVE_ALL = 0
+    LOVE_FIFTEEN = 1
+    LOVE_THIRTY = 2
+    LOVE_FOURTY = 3
+    FIFTEEN_LOVE = 4
+    FIFTEEN_ALL = 5
+    FIFTEEN_THIRTY = 6
+    FIFTEEN_FOURTY = 7
+    THIRTY_LOVE = 8
+    THIRTY_FIFTEEN = 9
+    THIRTY_ALL = 10
+    THIRTY_FOURTY = 11
+    FOURTY_LOVE = 12
+    FOURTY_FIFTEEN = 13
+    FOURTY_THIRTY = 14
+    DEUCE = 15
+    FOURTY_AD = 16
+    AD_FOURTY = 17
 
-    """
-    Returns 1 if the server will win the game if they win the point, -1 if the returner will win, and 0 if neither will win
-    Currently does not work with the NextGen ruleset (no-ad)
-    For convenience use Point::decider_for
-    """
-    def decider(self) -> int:
-        match self:
+    # these just make some data analysis operations easier
+    SERVER_WON = 18
+    RETURNER_WON = 19
+
+
+
+    @staticmethod
+    def decider(state: GameState) -> int:
+        """
+        Currently does not work with the NextGen ruleset (no-ad)
+        For convenience use Point::decider_for
+
+        :return: 1 if the server will win the game if they win the point, -1 if the returner will win, and 0 if neither will win
+        :rtype: int
+        """
+        match state:
             case GameState.LOVE_FOURTY:
                 return -1
             case GameState.FIFTEEN_FOURTY:
@@ -61,12 +70,36 @@ class GameState(IntEnum):
                 return 1
             case _:
                 return 0
+    
+    
+    @staticmethod 
+    def result(state: GameState, winner: int) -> GameState:
+        """
+        Returns the next game state that follows if the indicated player won the point.
+
+        :param int winner: 1 if the server won, -1 if the returner won
+        """
+        if GameState.decider(state) == winner:
+            return GameState.SERVER_WON if winner == 1 else GameState.RETURNER_WON
+        if state != GameState.DEUCE and state != GameState.FOURTY_AD and state != GameState.AD_FOURTY:
+            if winner == 1:
+                return GameState(state + 4)
+            elif winner == -1:
+                return GameState(state + 1)
+        if state == GameState.DEUCE:
+            if winner == 1:
+                return GameState.AD_FOURTY
+            elif winner == -1:
+                return GameState.FOURTY_AD
+        return GameState.DEUCE
 
 
-"""
-Use this to index point-related fields in the numpy array more clearly
-"""
+
+
 class MatrixIndex(IntEnum):
+    """
+    Use this to index point-related fields in the numpy array more clearly
+    """
     MATCH_ID_HASH = 0
     POINT_IDX = 1
     SERVER = 2
@@ -93,13 +126,14 @@ class Point:
     event: PointEvent
     games: tuple[int, int]
     sets: tuple[int, int]
+    players: tuple[str, str]
 
 
-    """
-    Returns true if 'player' will win the game if they win this point
-    """
     def decider_for(self, player: int) -> bool:
-        d = self.current_score.decider()
+        """
+        Returns true if 'player' will win the game if they win this point
+        """
+        d = GameState.decider(self.current_score)
         return (d == 1 and player == self.server) or (d == -1 and player != self.server)
         
 

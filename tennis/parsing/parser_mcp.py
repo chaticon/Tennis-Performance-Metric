@@ -104,10 +104,10 @@ _RETURN_PATTERN = '[' + ''.join([c.value for c in ServiceDirection]) + '][' \
                          + ''.join([c.value for c in RallyEnd]) + ']' # this matches anything like '4f*' or '5+b=37w@'
 
 
-"""
-Determines how the point ended using the raw point string and returns the result as a PointEvent
-"""
 def event_from_raw(raw: str) -> PointEvent:
+    """
+    Determines how the point ended using the raw point string and returns the result as a PointEvent
+    """
     first, second = raw.split(',')
     point = second if second else first # if there was a second serve, then that's where the point actually played out
     
@@ -135,24 +135,44 @@ def event_from_raw(raw: str) -> PointEvent:
                 case RallyEnd.FORCED_ERROR:
                     return PointEvent.FORCED_ERROR
     
+    # room for improvement, we could consider a failed challenge as a winner for example
     return PointEvent.UNKNOWN
 
 
-"""
-Parse a Match Charting Project data file into a numpy array
-Each row of the array represents a point, with the following data:
+def player_names_from_id(id: str) -> tuple[str, str]:
+    """
+    Obtains a tuple of the players' names who participated in the match from the MCP match_id
+    """
+    tokens = id.split('-')
+    return tokens[-2], tokens[-1]
 
-match_id_hash point_idx server game_state point_event point_winner game_winner
 
-See match_data.MatrixIndex
-"""
-def parse_mcp(mcp_file: str) -> NDArray[np.integer]:
+def parse_mcp(mcp_file: str, player_name: str = None) -> tuple[NDArray[np.integer], NDArray]:
+    """
+    Parse a Match Charting Project data file into a numpy array
+
+    Each row of the array represents a point, with the following data:
+
+    match_id_hash point_idx server game_state point_event point_winner game_winner
+
+    See match_data.MatrixIndex
+
+    Also returns a parallel numpy array containing the players who played each point
+
+    If player_name is specified, only extracts points played by that player
+
+    TODO: A good idea would be to convert to using pandas dataframes, as these can handle multiple data types as well as grouping
+    which is better than numpy for this application. I'm more familiar with numpy so I went with it as my first instinct
+    """
     matches = {}
 
     with open(mcp_file) as f:
         reader = csv.DictReader(f)
         # each row represents one point
         for point in reader:
+            players = player_names_from_id(point['match_id'])
+            if player_name is not None and player_name not in players:
+                continue
             match_id = point['match_id']
             pts = matches.setdefault(match_id, {}) # get/create the associated point dict
             raw = ','.join([point['1st'].strip(), point['2nd'].strip()]) # put the 1st and 2nd serves together into one string describing the point
@@ -162,7 +182,8 @@ def parse_mcp(mcp_file: str) -> NDArray[np.integer]:
             if score in game_states:
                 try: 
                     p = Point(raw, int(point['PtWinner']), int(point['Svr']), game_states[score], event_from_raw(raw),
-                            (int(point['Gm1']), int(point['Gm2'])), (int(point['Set1']), int(point['Set2'])))
+                            (int(point['Gm1']), int(point['Gm2'])), (int(point['Set1']), int(point['Set2'])),
+                            players)
                     pts[int(point['Pt'])] = p
                 except ValueError:
                     print(f'Error parsing point {point['Pt']} of match "{match_id}" in file "{mcp_file}"')
@@ -172,6 +193,7 @@ def parse_mcp(mcp_file: str) -> NDArray[np.integer]:
     # now we parse the dictionary into a numpy array
 
     output = []
+    players = []
     for match_id in matches:
         points = matches[match_id]
         i = 1
@@ -179,25 +201,28 @@ def parse_mcp(mcp_file: str) -> NDArray[np.integer]:
         for i in range(1, max(points) + 1): # now that we know we have all the available points, we can safely view them in order
             if i not in points:
                 continue
-
+            
             point = points[i]
             
             # this should be a more foolproof way to determine which points are part of which game
             if game_points:
                 last_idx, last_point = game_points[-1] # the most recent point in the game other than maybe 'point'
                 if point.games != last_point.games or point.sets != last_point.sets: # the next point is from a different game, so we may be missing the deciding point 
-                    if last_idx == i - 1: # we aren't missing any intermediate points, so we can obtain the winner of the game as the winner of the last point (covers NextGen ruleset)
+                    if last_idx == i - 1: # we aren't missing any intermediate points, so we can obtain the winner of the game as the winner of the last point (covers NextGen ruleset, but I think for better analysis you should stick to one ruleset in your dataset)
                         for i, p in game_points:
                             output.append([hash(match_id), i, p.server, p.current_score, p.event, p.winner, last_point.winner])
+                            players.append(point.players)
                     game_points = [] # regardless we clear the game points, as we aren't interested in points where we couldn't determine the winner of the game
                 elif point.decider_for(point.winner): # the winner of the next point won the game
                     game_points.append((i, point))
                     for i, p in game_points:
                         output.append([hash(match_id), i, p.server, p.current_score, p.event, p.winner, point.winner])
+                        players.append(point.players)
                     game_points = []
                     continue # we don't want to add duplicate points
 
             game_points.append((i, point))
 
     output = np.array(output)
-    return output
+    players = np.array(players, dtype=np.dtypes.StringDType())
+    return output, players
